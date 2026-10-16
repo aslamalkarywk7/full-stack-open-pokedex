@@ -51,28 +51,32 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
-      - name: Deploy to Fly.io
-        # only for pushes/merges to main (11.14), never for pull requests,
-        # and never for commits marked with #skip (11.16)
+      # 11.11 / 11.14: deploy only for pushes and merges into main,
+      # never for pull requests and never for a commit marked with #skip.
+      # The extra check on the token keeps the pipeline green while no Fly.io
+      # credentials have been configured yet.
+      - name: Setup flyctl
         if: ${{ env.SKIP_DEPLOY == 'true' && env.FLY_API_TOKEN != '' }}
         uses: superfly/flyctl-actions/setup-flyctl@master
-      - name: flyctl deploy
+
+      - name: Deploy to Fly.io
         if: ${{ env.SKIP_DEPLOY == 'true' && env.FLY_API_TOKEN != '' }}
-        run: flyctl deploy --remote-only --build-only=false
+        run: flyctl deploy --remote-only
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
 
-      - name: Notify Discord about a deployment
+      # 11.18: a success notification once a new version has been deployed
+      - name: Notify Discord about the deployment
         if: ${{ env.SKIP_DEPLOY == 'true' && env.DISCORD_WEBHOOK != '' }}
         uses: Ilshidur/action-discord@master
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK }}
           title: Deployed ${{ github.sha }}
-          description: 'Version ${{ github.sha }} of the Pokedex is live.'
+          description: Version ${{ github.sha }} of the Pokedex is live.
           color: 0x50D355
 
   tag_release:
-    # 11.15: the version bump only happens after lint/test/build/deploy passed
+    # 11.15: the version bump happens only after lint/test/build/deploy passed
     needs: [simple_deployment_pipeline]
     runs-on: ubuntu-latest
     steps:
@@ -88,10 +92,11 @@ jobs:
   notify_failure:
     # 11.18: a verbose notification whenever the pipeline fails
     needs: [simple_deployment_pipeline]
-    if: ${{ failure() && env.DISCORD_WEBHOOK != '' }}
+    if: ${{ failure() }}
     runs-on: ubuntu-latest
     steps:
-      - name: Notify Discord about a failure
+      - name: Notify Discord about the failure
+        if: ${{ env.DISCORD_WEBHOOK != '' }}
         uses: Ilshidur/action-discord@master
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK }}
@@ -100,5 +105,5 @@ jobs:
             Commit: ${{ github.sha }}
             Author: ${{ github.actor }}
             Message: ${{ join(github.event.commits.*.message, ' / ') }}
-            Link: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            Log: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           color: 0xE03131

@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 env:
-  TARGET_URL: ${{ vars.HEALTHCHECK_URL || 'https://full-stack-open-pokedex.fly.dev/health' }}
+  TARGET_URL: ${{ vars.HEALTHCHECK_URL }}
 
 jobs:
   health_check:
