@@ -9,8 +9,10 @@ on:
     types: [opened, synchronize]
 
 env:
-  # 11.16: a commit message containing #skip is neither deployed nor tagged
-  SKIP_DEPLOY: "${{ !contains(join(github.event.commits.*.message, ' '), '#skip') }}"
+  # 11.14 + 11.16: only a push to main that is not marked with #skip is a
+  # release. Pull requests always have an empty commit list, so this also
+  # keeps the deployment and the version bump off pull requests.
+  IS_RELEASE: "${{ github.event_name == 'push' && !contains(join(github.event.commits.*.message, ' '), '#skip') }}"
   FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
   DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
 
@@ -56,18 +58,18 @@ jobs:
       # The extra check on the token keeps the pipeline green while no Fly.io
       # credentials have been configured yet.
       - name: Setup flyctl
-        if: ${{ env.SKIP_DEPLOY == 'true' && env.FLY_API_TOKEN != '' }}
+        if: ${{ env.IS_RELEASE == 'true' && env.FLY_API_TOKEN != '' }}
         uses: superfly/flyctl-actions/setup-flyctl@master
 
       - name: Deploy to Fly.io
-        if: ${{ env.SKIP_DEPLOY == 'true' && env.FLY_API_TOKEN != '' }}
+        if: ${{ env.IS_RELEASE == 'true' && env.FLY_API_TOKEN != '' }}
         run: flyctl deploy --remote-only
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
 
       # 11.18: a success notification once a new version has been deployed
       - name: Notify Discord about the deployment
-        if: ${{ env.SKIP_DEPLOY == 'true' && env.DISCORD_WEBHOOK != '' }}
+        if: ${{ env.IS_RELEASE == 'true' && env.DISCORD_WEBHOOK != '' }}
         uses: Ilshidur/action-discord@master
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK }}
@@ -81,7 +83,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Bump version and push tag
-        if: ${{ env.SKIP_DEPLOY == 'true' }}
+        if: ${{ env.IS_RELEASE == 'true' }}
         uses: anothrNick/github-tag-action@8c8163ef62cf9c4677c8e800f36270af27930f42
         with:
           default_bump: patch
