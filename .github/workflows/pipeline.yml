@@ -1,0 +1,104 @@
+name: Deployment pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize]
+
+env:
+  # 11.16: a commit message containing #skip is neither deployed nor tagged
+  SKIP_DEPLOY: "${{ !contains(join(github.event.commits.*.message, ' '), '#skip') }}"
+  FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+  DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+
+jobs:
+  simple_deployment_pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check style
+        run: npm run eslint
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: e2e tests
+        run: npm run test:e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+      - name: Deploy to Fly.io
+        # only for pushes/merges to main (11.14), never for pull requests,
+        # and never for commits marked with #skip (11.16)
+        if: ${{ env.SKIP_DEPLOY == 'true' && env.FLY_API_TOKEN != '' }}
+        uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: flyctl deploy
+        if: ${{ env.SKIP_DEPLOY == 'true' && env.FLY_API_TOKEN != '' }}
+        run: flyctl deploy --remote-only --build-only=false
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      - name: Notify Discord about a deployment
+        if: ${{ env.SKIP_DEPLOY == 'true' && env.DISCORD_WEBHOOK != '' }}
+        uses: Ilshidur/action-discord@master
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          title: Deployed ${{ github.sha }}
+          description: 'Version ${{ github.sha }} of the Pokedex is live.'
+          color: 0x50D355
+
+  tag_release:
+    # 11.15: the version bump only happens after lint/test/build/deploy passed
+    needs: [simple_deployment_pipeline]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Bump version and push tag
+        if: ${{ env.SKIP_DEPLOY == 'true' }}
+        uses: anothrNick/github-tag-action@8c8163ef62cf9c4677c8e800f36270af27930f42
+        with:
+          default_bump: patch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DRY_RUN: false
+
+  notify_failure:
+    # 11.18: a verbose notification whenever the pipeline fails
+    needs: [simple_deployment_pipeline]
+    if: ${{ failure() && env.DISCORD_WEBHOOK != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify Discord about a failure
+        uses: Ilshidur/action-discord@master
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          title: Pipeline failed
+          description: |
+            Commit: ${{ github.sha }}
+            Author: ${{ github.actor }}
+            Message: ${{ join(github.event.commits.*.message, ' / ') }}
+            Link: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          color: 0xE03131

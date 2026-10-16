@@ -1,0 +1,35 @@
+# 11.10: Fly.io configuration for the Pokedex.
+# The production build of the frontend must exist before deploying.
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "3000"
+
+[processes]
+  app = "node app.js"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+  # 11.12: an HTTP level health check makes sure the deployed app really works
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    timeout = "5s"
+    path = "/health"
+
+# 11.12: canary deployments only promote a release that is healthy
+[deploy]
+  strategy = "canary"
+
+  [[deploy.rollback]]
+    to = 0
+    delay = "5m"
