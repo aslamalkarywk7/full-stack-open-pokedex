@@ -1,0 +1,21 @@
+name: Periodic health check
+
+on:
+  schedule:
+    # 11.19: once a day, the deployed application is pinged
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+env:
+  TARGET_URL: ${{ vars.HEALTHCHECK_URL }}
+
+jobs:
+  health_check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping the deployed application
+        uses: ethercreative/action-healthcheck@master
+        with:
+          url: ${{ env.TARGET_URL }}
+          timeout: 5000
+          retries: 3

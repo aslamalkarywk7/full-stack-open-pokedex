@@ -1,2 +1,17 @@
 dist/
 node_modules/
+
+# test artifacts
+test-results/
+playwright-report/
+blob-report/
+coverage/
+
+# env files
+.env
+.env.local
+.env.*.local
+
+*.log
+npm-debug.log*
+.DS_Store
