@@ -89,7 +89,8 @@ jobs:
           default_bump: patch
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DRY_RUN: false
+          # DRY_RUN is deliberately not set: the action treats any value as
+          # "true", so only omit it when a real tag should be created.
 
   notify_failure:
     # 11.18: a verbose notification whenever the pipeline fails
